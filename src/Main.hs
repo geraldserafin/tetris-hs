@@ -2,12 +2,12 @@ module Main where
 
 import Graphics.Gloss
 
-import Logic (transformGame)
-import Rendering (gameAsPicture, background)
+import Events (transformGame)
 import Game (initialGame, tick)
+import Rendering (gameAsPicture, background)
 
 windowSize :: (Int, Int)
-windowSize = (330, 630)
+windowSize = (310, 610)
 
 display' :: Display
 display' = InWindow "tetris-hs" windowSize (200,200)
