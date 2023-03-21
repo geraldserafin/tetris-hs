@@ -3,7 +3,8 @@ module Game where
 
 import Graphics.Gloss (Color, green)
 import Data.Maybe (catMaybes)
-import Data.Matrix (mapPos, fromLists, toList, fromList, transpose, toLists)
+import Data.List (transpose)
+import Data.Matrix (mapPos, fromLists, toList, fromList, toLists)
 
 data Block = Block { color :: Color, pos :: (Int, Int) } 
 
@@ -27,7 +28,11 @@ moveTetrominoe :: Move -> [[Maybe Block]] -> [[Maybe Block]]
 moveTetrominoe md = map (map (moveBlock md)) 
 
 -- rotateTetrominoe :: [[Maybe Block]] -> [[Maybe Block]]
--- rotateTetrominoe t = fromList t
+rotateTetrominoe t = map reverse $ transpose t
+
+-- [0 1 1]
+-- [0 1 0] ->
+-- [0 1 0]
 
 handleMove :: Move -> Game -> Game
 handleMove md g@(Game _ b t)
