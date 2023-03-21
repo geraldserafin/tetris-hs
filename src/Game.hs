@@ -1,54 +1,72 @@
+{-# LANGUAGE InstanceSigs #-}
 module Game where
 
 import Graphics.Gloss (Color, green)
+import Data.Maybe (catMaybes)
+import Data.Matrix (mapPos, fromLists, toList, fromList, transpose, toLists)
 
-data MoveDirection = MoveLeft | MoveRight | MoveDown
-data Tile = Tile { color :: Color, pos :: (Float,Float) } deriving Eq
-data Game = Game { tiles :: [Tile], fallT :: Float, tetronomicon :: [Tile] }
+data Block = Block { color :: Color, pos :: (Int, Int) } 
 
-moveTile :: MoveDirection -> Tile -> Tile
-moveTile MoveLeft  (Tile c (x, y)) = Tile c (x, y-1)
-moveTile MoveRight (Tile c (x, y)) = Tile c (x, y+1)
-moveTile MoveDown  (Tile c (x, y)) = Tile c (x+1, y)
+instance Eq Block where 
+  (==) :: Block -> Block -> Bool
+  (==) (Block _ p1) (Block _ p2) = p1 == p2
 
-moveTetronomicon :: MoveDirection -> Game -> Game
-moveTetronomicon md game@(Game _ _ t) = game {
-  tetronomicon = map (moveTile md) t
-}
+data Game = Game  { fallTime :: Float,  blocks :: [Block], tetrominoe :: [[Maybe Block]] }
+data Move = MoveLeft | MoveRight | MoveDown
 
-haveCommonElements :: Eq a => [a] -> [a] -> Bool
-haveCommonElements xs ys = null ([ x | x <- xs , y <- ys, x == y])
+move :: Move -> (Int, Int) -> (Int, Int)
+move MoveLeft  (x, y) = (x, y-1)
+move MoveRight (x, y) = (x, y+1)
+move MoveDown  (x, y) = (x+1, y)
 
-overflows :: MoveDirection -> Game -> Bool
-overflows MoveLeft  = (>=) 0  . minimum . map (snd . pos) . tetronomicon
-overflows MoveRight = (<=) 9  . maximum . map (snd . pos) . tetronomicon
-overflows MoveDown  = (<=) 19 . maximum . map (fst . pos) . tetronomicon
+moveBlock :: Move -> Maybe Block -> Maybe Block
+moveBlock md (Just (Block c p)) = Just $ Block c (move md p)
+moveBlock _ Nothing = Nothing
 
-canMove :: MoveDirection -> Game -> Bool
-canMove md game = haveCommonElements movedShape gameTiles && not (overflows md game)
+moveTetrominoe :: Move -> [[Maybe Block]] -> [[Maybe Block]]
+moveTetrominoe md = map (map (moveBlock md)) 
+
+-- rotateTetrominoe :: [[Maybe Block]] -> [[Maybe Block]]
+-- rotateTetrominoe t = fromList t
+
+handleMove :: Move -> Game -> Game
+handleMove md g@(Game _ b t)
+  | transformConditions = g { tetrominoe = tt }
+  | otherwise = g
   where
-    movedShape = tetronomicon $ moveTetronomicon md game
-    gameTiles  = tiles game
+    tt = moveTetrominoe md t
+    transformConditions = tt `isInside` (20,10) && tt `notCollidesWith` b
 
-handleMove :: MoveDirection -> Game -> Game
-handleMove md game = if canMove md game then moveTetronomicon md game else game
+isInside :: [[Maybe Block]] -> (Int, Int) -> Bool
+isInside t (r, c) = all (posInside . pos) . catMaybes $ concat t
+  where
+    posInside (x, y) = x `elem` [0..r-1] && y `elem` [0..c-1]
 
-l :: [Tile]
-l = map (Tile green) [(0,0), (0,1), (1,0), (2,0)]
+notCollidesWith :: [[Maybe Block]] -> [Block] -> Bool
+notCollidesWith t b = not . any (`elem` b) . catMaybes $ concat t
+
+tick :: Float -> Game -> Game
+tick et g@(Game ft _ _)
+  | 1 <= ft   = (handleMove MoveDown g) { fallTime = 0 }
+  | otherwise = g { fallTime = ft + (et * 8)}
 
 initialGame :: Game
 initialGame = Game {
-  tiles = [],
-  fallT = 0,
-  tetronomicon = l
+  fallTime   = 0,
+  blocks     = [],
+  tetrominoe = l
 }
 
-fall :: Game -> Game
-fall g@(Game s _ t)
-  | canMove MoveDown g = handleMove MoveDown g { fallT = 0 }
-  | otherwise = g { fallT = 0, tetronomicon = l, tiles = s ++ t }
+l :: [[Maybe Block]]
+l = makeTetrominoe green lShape
 
-tick :: Float -> Game -> Game
-tick elapsedTime game
-  | ((>=1) . fallT) game = fall game
-  | otherwise = game { fallT = fallT game + (elapsedTime * 16) }
+makeTetrominoe :: Color -> [[Int]] -> [[Maybe Block]]
+makeTetrominoe c = toLists . mapPos intToBlock . fromLists 
+  where 
+    intToBlock (x,y) 1 = Just $ Block c (x-1, y+2) 
+    intToBlock _ _ = Nothing
+
+lShape :: [[Int]]
+lShape = [[0,1,1],
+          [0,1,0],
+          [0,1,0]]
