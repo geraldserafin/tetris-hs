@@ -4,6 +4,7 @@ import Graphics.Gloss
 import Events (transformGame)
 import Game (initialGame, tick)
 import Rendering (gameAsPicture, background)
+import Control.Monad.Random (getStdGen)
 
 windowSize :: (Int, Int)
 windowSize = (330, 630)
@@ -13,5 +14,5 @@ display' = InWindow "tetris-hs" windowSize (200,200)
 
 main :: IO ()
 main = do 
-  initialGame' <- initialGame
-  play display' background 120 initialGame' gameAsPicture transformGame tick 
+  gen <- getStdGen
+  play display' background 120 (initialGame gen) gameAsPicture transformGame tick 

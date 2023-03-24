@@ -4,7 +4,10 @@ module Game where
 import qualified Graphics.Gloss.Data.Point.Arithmetic as P ((+), (-))
 import Graphics.Gloss (Color, orange, red, blue, Point, yellow, violet, aquamarine, azure)
 import Control.Applicative (Applicative(liftA2))
-import Control.Monad.Random (MonadRandom(getRandomRs))
+import Control.Monad.Random (Random (randomR), RandomGen)
+import Data.List (sortBy, groupBy)
+import Data.Function (on)
+import GHC.Float (int2Float)
 
 data Tile = Tile { color' :: Color, pos :: Point}
 
@@ -19,11 +22,11 @@ data Tetromino = Tetromino {
   tiles' :: [Tile]
 }
 
-data Game = Game  { 
-  fallTime :: Float,  
-  tiles :: [Tile], 
-  tetromino :: Tetromino, 
-  tetrominos' :: [Tetromino] 
+data Game = Game  {
+  fallTime :: Float,
+  tiles :: [Tile],
+  tetromino :: Tetromino,
+  tetrominos' :: [Tetromino]
 }
 
 data RotationDirection = RotateLeft | RotateRight
@@ -64,7 +67,7 @@ collides b = any (`elem` b) . tiles'
 
 handleMove :: Point -> Game -> Game
 handleMove md g@(Game _ ts t n)
-  | invalidMove down     = g { tetromino = head n, tiles = ts ++ tiles' t, tetrominos' = tail n }
+  | invalidMove down     = clearRows g { tetromino = head n, tiles = ts ++ tiles' t, tetrominos' = tail n }
   | not (invalidMove md) = g { tetromino = moveTetromino md t }
   | otherwise = g
   where
@@ -72,16 +75,17 @@ handleMove md g@(Game _ ts t n)
 
 dropTetromino :: Game -> Game
 dropTetromino g@(Game _ ts t _) = g {
-  tetromino = moveTetromino (0, 1) . until (liftA2 (||) overflows (collides ts)) (moveTetromino down) $ t
-} 
+  fallTime = 1,
+  tetromino = until (liftA2 (||) overflows (collides ts) . moveTetromino down) (moveTetromino down) t
+}
 
 handleRotate :: RotationDirection -> Game -> Game
-handleRotate rd g@(Game _ b t _) = g { tetromino = head (valid ++ [t]) }
+handleRotate rotationDir g@(Game _ b tetro _) = g { tetromino = head (valid ++ [tetro]) }
   where
     kick  = not . liftA2 (||) overflows (collides b)
     valid = filter kick
-          . map (rotateTetrominoe rd . (`moveTetromino` t))
-          $ getTests rd (rotation t) (offsets t)
+          . map (rotateTetrominoe rotationDir . (`moveTetromino` tetro))
+          $ getTests rotationDir (rotation tetro) (offsets tetro)
 
 getTests :: RotationDirection -> Rotation -> (Rotation -> [Point]) -> [Point]
 getTests rd r o = zipWith (P.-) (o r) (o $ nextRotation rd r)
@@ -92,27 +96,49 @@ nextRotation RotateRight Z = L
 nextRotation RotateLeft  x = pred x
 nextRotation RotateRight x = succ x
 
-randomTetrominos :: (MonadRandom m) => m [Tetromino]
-randomTetrominos = do
-  xs <- getRandomRs (0, length tetrominos - 1)
-  return $ map (tetrominos !!) xs
-
 tetrominos :: [Tetromino]
 tetrominos = map (moveTetromino (5,20)) [j,l,s,t',z,i,o']
 
-initialGame :: MonadRandom m => m Game
-initialGame = do
-  r <- randomTetrominos
-  return Game {
+remove :: Int -> [a] -> [a]
+remove _ [] = []
+remove 0 (_:xs) = xs
+remove n (x:xs) = x : remove (n-1) xs
+
+shuffle :: RandomGen g => [a] -> g -> ([a], g)
+shuffle [] = (,) []
+shuffle ls = shuffle' ([], ls)
+  where
+    shuffle' (v, []) g = (v, g) 
+    shuffle' (v, resource) g = shuffle' (resource !! index : v, remove index resource) g'
+      where 
+        (index, g') = randomR (0, length resource - 1) g
+
+infiniteTetrominos :: RandomGen g => g -> [Tetromino]
+infiniteTetrominos g = v ++ infiniteTetrominos g' 
+  where 
+    (v, g') = shuffle tetrominos g
+
+initialGame :: RandomGen g => g -> Game
+initialGame gen =  Game {
     fallTime   = 0,
     tiles      = [],
-    tetromino   = head r,
-    tetrominos' = tail r
+    tetromino   = head t,
+    tetrominos' = tail t
   }
+  where 
+    t = infiniteTetrominos gen
 
+clearRows :: Game -> Game
+clearRows g@(Game _ ts _ _) = g { tiles = concat moveDown }
+  where
+    rows = zip [0..] $ groupBy ((==) `on` (snd . pos)) $ sortBy (compare `on` (snd . pos)) ts :: [(Int, [Tile])]
+    cleared = filter ((/=10) . length . snd) rows
+    fullXs  = map fst $ filter ((==10) . length . snd) rows
+    rowsBelow x = length $ filter (<x) fullXs
+    moveDown = map (\(x1, t) -> map (moveTile (0, - int2Float (rowsBelow x1))) t) cleared
 
 tick :: Float -> Game -> Game
-tick et g@(Game ft _ _ _) 
+tick et g@(Game ft _ _ _)
   | 1 <= ft   = (handleMove down g) { fallTime = 0 }
   | otherwise = g { fallTime = ft + et * 4 }
 
@@ -139,10 +165,10 @@ jlstzBase = Tetromino (1,1) O jlstzOffsets
 
 j, l, s, t', z, i, o' :: Tetromino
 s = jlstzBase (map (Tile aquamarine) [(0,1), (1,1), (1,2), (2,2)])
-j = jlstzBase (map (Tile blue  ) [(0,2), (0,1), (1,1), (2,1)])
-l = jlstzBase (map (Tile orange) [(0,1), (1,1), (2,1), (2,2)])
-t'= jlstzBase (map (Tile violet) [(0,1), (1,1), (1,2), (2,1)])
-z = jlstzBase (map (Tile red   ) [(0,2), (1,2), (1,1), (2,1)])
+j = jlstzBase (map (Tile blue  )     [(0,2), (0,1), (1,1), (2,1)])
+l = jlstzBase (map (Tile orange)     [(0,1), (1,1), (2,1), (2,2)])
+t'= jlstzBase (map (Tile violet)     [(0,1), (1,1), (1,2), (2,1)])
+z = jlstzBase (map (Tile red   )     [(0,2), (1,2), (1,1), (2,1)])
 i = Tetromino {
   middle   = (2,2),
   rotation = O,
