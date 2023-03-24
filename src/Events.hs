@@ -1,6 +1,8 @@
 module Events where
-import Game (Game, handleMove, left, right, handleRotate, RotationDirection (RotateRight, RotateLeft), dropTetromino, down)
+import Game (Game, handleMove, handleRotate, handleDrop)
 import Graphics.Gloss.Interface.IO.Game (KeyState (Down), Key (SpecialKey, Char), SpecialKey (KeyRight, KeyLeft, KeyDown, KeyUp, KeySpace), Event (EventKey))
+import Tile (RotationDirection(RotateLeft, RotateRight))
+import Tetromino (right, left, down)
 
 transformGame :: Event -> Game -> Game
 transformGame (EventKey key state _ _) = handleKey key state 
@@ -20,6 +22,6 @@ handleSpecialKey :: SpecialKey -> Game -> Game
 handleSpecialKey KeyRight = handleMove right
 handleSpecialKey KeyLeft  = handleMove left 
 handleSpecialKey KeyDown  = handleMove down 
-handleSpecialKey KeySpace = dropTetromino
+handleSpecialKey KeySpace = handleDrop
 handleSpecialKey KeyUp    = handleRotate RotateRight
 handleSpecialKey _  = id

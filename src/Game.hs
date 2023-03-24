@@ -1,26 +1,13 @@
-{-# LANGUAGE InstanceSigs #-}
 module Game where
-
-import qualified Graphics.Gloss.Data.Point.Arithmetic as P ((+), (-))
-import Graphics.Gloss (Color, orange, red, blue, Point, yellow, violet, aquamarine, azure)
-import Control.Applicative (Applicative(liftA2))
-import Control.Monad.Random (Random (randomR), RandomGen)
+import Graphics.Gloss (Point)
+import Control.Monad.Random (RandomGen)
 import Data.List (sortBy, groupBy)
 import Data.Function (on)
 import GHC.Float (int2Float)
+import Tile (Tile (pos), RotationDirection, moveTile)
 
-data Tile = Tile { color' :: Color, pos :: Point}
-
-instance Eq Tile where
-  (==) :: Tile -> Tile -> Bool
-  (==) (Tile _ p1) (Tile _ p2) = p1 == p2
-
-data Tetromino = Tetromino {
-  middle :: Point,
-  rotation :: Rotation,
-  offsets  :: Rotation -> [Point],
-  tiles' :: [Tile]
-}
+import Tetromino (Tetromino (angle, offsets, tiles'), down, rotateTetromino, invalidPosition, tests, moveTetromino, dropTetromino)
+import Shuffle (infiniteTetrominos)
 
 data Game = Game  {
   fallTime :: Float,
@@ -29,41 +16,11 @@ data Game = Game  {
   tetrominos' :: [Tetromino]
 }
 
-data RotationDirection = RotateLeft | RotateRight
-data Rotation = L | O | R | Z deriving Enum
-
-left, right, down :: Point
-left  = (-1, 0)
-right = ( 1, 0)
-down  = ( 0,-1)
-
-moveTile :: Point -> Tile -> Tile
-moveTile p1 (Tile c p2) = Tile c (p1 P.+ p2)
-
-rotateTile :: RotationDirection -> Point -> Tile -> Tile
-rotateTile RotateRight (cx, cy) (Tile e (x,y)) = Tile e (y-cy+cx , negate (x-cx)+cy)
-rotateTile RotateLeft  (cx, cy) (Tile e (x,y)) = Tile e (negate (y-cy)+cx, x-cx+cy)
-
-moveTetromino :: Point -> Tetromino -> Tetromino
-moveTetromino p1 t = t {
-  middle = middle t P.+ p1,
-  tiles' = map (moveTile p1) (tiles' t)
+handleDrop :: Game -> Game
+handleDrop g@(Game _ ts t _) = g {
+  fallTime = 1,
+  tetromino = dropTetromino ts t
 }
-
-rotateTetrominoe :: RotationDirection -> Tetromino -> Tetromino
-rotateTetrominoe rd t = t {
-  rotation = nextRotation rd (rotation t),
-  tiles'   = map (rotateTile rd $ middle t) (tiles' t)
-}
-
-overflows :: Tetromino -> Bool
-overflows = any (liftA2 (||) xs ys . pos) . tiles'
-  where
-    xs = (`notElem` [1..10]) . fst
-    ys = (`notElem` [1..24]) . snd
-
-collides :: [Tile] -> Tetromino -> Bool
-collides b = any (`elem` b) . tiles'
 
 handleMove :: Point -> Game -> Game
 handleMove md g@(Game _ ts t n)
@@ -71,62 +28,14 @@ handleMove md g@(Game _ ts t n)
   | not (invalidMove md) = g { tetromino = moveTetromino md t }
   | otherwise = g
   where
-    invalidMove x = liftA2 (||) overflows (collides ts) $ moveTetromino x t
-
-dropTetromino :: Game -> Game
-dropTetromino g@(Game _ ts t _) = g {
-  fallTime = 1,
-  tetromino = until (liftA2 (||) overflows (collides ts) . moveTetromino down) (moveTetromino down) t
-}
+    invalidMove x = invalidPosition ts $ moveTetromino x t
 
 handleRotate :: RotationDirection -> Game -> Game
-handleRotate rotationDir g@(Game _ b tetro _) = g { tetromino = head (valid ++ [tetro]) }
+handleRotate rotationDir g@(Game _ ts tetro _) = g { tetromino = head (valid ++ [tetro]) }
   where
-    kick  = not . liftA2 (||) overflows (collides b)
-    valid = filter kick
-          . map (rotateTetrominoe rotationDir . (`moveTetromino` tetro))
-          $ getTests rotationDir (rotation tetro) (offsets tetro)
-
-getTests :: RotationDirection -> Rotation -> (Rotation -> [Point]) -> [Point]
-getTests rd r o = zipWith (P.-) (o r) (o $ nextRotation rd r)
-
-nextRotation :: RotationDirection -> Rotation -> Rotation
-nextRotation RotateLeft  L = Z
-nextRotation RotateRight Z = L
-nextRotation RotateLeft  x = pred x
-nextRotation RotateRight x = succ x
-
-tetrominos :: [Tetromino]
-tetrominos = map (moveTetromino (5,20)) [j,l,s,t',z,i,o']
-
-remove :: Int -> [a] -> [a]
-remove _ [] = []
-remove 0 (_:xs) = xs
-remove n (x:xs) = x : remove (n-1) xs
-
-shuffle :: RandomGen g => [a] -> g -> ([a], g)
-shuffle [] = (,) []
-shuffle ls = shuffle' ([], ls)
-  where
-    shuffle' (v, []) g = (v, g) 
-    shuffle' (v, resource) g = shuffle' (resource !! index : v, remove index resource) g'
-      where 
-        (index, g') = randomR (0, length resource - 1) g
-
-infiniteTetrominos :: RandomGen g => g -> [Tetromino]
-infiniteTetrominos g = v ++ infiniteTetrominos g' 
-  where 
-    (v, g') = shuffle tetrominos g
-
-initialGame :: RandomGen g => g -> Game
-initialGame gen =  Game {
-    fallTime   = 0,
-    tiles      = [],
-    tetromino   = head t,
-    tetrominos' = tail t
-  }
-  where 
-    t = infiniteTetrominos gen
+    valid = filter (not . invalidPosition ts)
+          . map (rotateTetromino rotationDir . (`moveTetromino` tetro))
+          $ tests rotationDir (angle tetro) (offsets tetro)
 
 clearRows :: Game -> Game
 clearRows g@(Game _ ts _ _) = g { tiles = concat moveDown }
@@ -140,44 +49,14 @@ clearRows g@(Game _ ts _ _) = g { tiles = concat moveDown }
 tick :: Float -> Game -> Game
 tick et g@(Game ft _ _ _)
   | 1 <= ft   = (handleMove down g) { fallTime = 0 }
-  | otherwise = g { fallTime = ft + et * 4 }
+  | otherwise = g { fallTime = ft + et }
 
---- terominos definitions
-
-jlstzOffsets, iOffsets, oOffsets :: Rotation -> [Point]
-jlstzOffsets O = [(0,0), ( 0,0), ( 0, 0), (0,0), ( 0,0)]
-jlstzOffsets R = [(0,0), ( 1,0), ( 1,-1), (0,2), ( 1,2)]
-jlstzOffsets Z = [(0,0), ( 0,0), ( 0, 0), (0,0), ( 0,0)]
-jlstzOffsets L = [(0,0), (-1,0), (-1,-1), (0,2), (-1,2)]
-
-iOffsets O = [( 0,0), (-1,0), ( 2,0), (-1, 0), ( 2,0)]
-iOffsets R = [(-1,0), ( 0,0), ( 0,0), ( 0, 1), ( 0,2)]
-iOffsets Z = [(-1,1), ( 1,1), (-2,1), ( 1, 0), (-2,0)]
-iOffsets L = [( 0,1), ( 0,1), ( 0,1), ( 0,-1), ( 0,2)]
-
-oOffsets O = [( 0, 0)]
-oOffsets R = [( 0,-1)]
-oOffsets Z = [(-1,-1)]
-oOffsets L = [(-1, 0)]
-
-jlstzBase :: [Tile] -> Tetromino
-jlstzBase = Tetromino (1,1) O jlstzOffsets
-
-j, l, s, t', z, i, o' :: Tetromino
-s = jlstzBase (map (Tile aquamarine) [(0,1), (1,1), (1,2), (2,2)])
-j = jlstzBase (map (Tile blue  )     [(0,2), (0,1), (1,1), (2,1)])
-l = jlstzBase (map (Tile orange)     [(0,1), (1,1), (2,1), (2,2)])
-t'= jlstzBase (map (Tile violet)     [(0,1), (1,1), (1,2), (2,1)])
-z = jlstzBase (map (Tile red   )     [(0,2), (1,2), (1,1), (2,1)])
-i = Tetromino {
-  middle   = (2,2),
-  rotation = O,
-  offsets  = iOffsets,
-  tiles' = map (Tile azure) [(1,2), (2,2), (3,2), (4,2)]
-}
-o' = Tetromino {
-  middle   = (1,1),
-  rotation = O,
-  offsets  = oOffsets,
-  tiles' = map (Tile yellow) [(1,1), (1,2), (2,1), (2,2)]
-}
+initialGame :: RandomGen g => g -> Game
+initialGame gen =  Game {
+    fallTime   = 0,
+    tiles      = [],
+    tetromino   = head t,
+    tetrominos' = tail t
+  }
+  where 
+    t = infiniteTetrominos gen
