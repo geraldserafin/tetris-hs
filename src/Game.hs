@@ -46,17 +46,16 @@ clearRows g@(Game _ ts _ _) = g { tiles = concat moveDown }
     rowsBelow x = length $ filter (<x) fullXs
     moveDown = map (\(x1, t) -> map (moveTile (0, - int2Float (rowsBelow x1))) t) cleared
 
-tick :: Float -> Game -> Game
-tick et g@(Game ft _ _ _)
+updateGame :: Float -> Game -> Game
+updateGame et g@(Game ft _ _ _)
   | 1 <= ft   = (handleMove down g) { fallTime = 0 }
   | otherwise = g { fallTime = ft + et }
 
 initialGame :: RandomGen g => g -> Game
-initialGame gen =  Game {
+initialGame gen = Game {
     fallTime   = 0,
     tiles      = [],
     tetromino   = head t,
     tetrominos' = tail t
   }
-  where 
-    t = infiniteTetrominos gen
+  where t = infiniteTetrominos gen
