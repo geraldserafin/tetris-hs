@@ -1,15 +1,20 @@
+{-# OPTIONS_GHC -Wno-deprecations #-}
 module Tetromino where
 
-import Graphics.Gloss (Point, aquamarine, blue, orange, violet, red, azure, yellow)
-import Tile (Angle (Z, L, R, O), Tile (pos, Tile), RotationDirection (RotateLeft, RotateRight), moveTile, rotateTile)
+import Graphics.Gloss (Point, aquamarine, blue, orange, violet, red, azure, yellow, makeColor, makeColorI, cyan, green)
+import Tile (RotationState (R2, RL, RR, R0), Tile (pos, Tile), RotationDirection (RotateLeft, RotateRight), moveTile, rotateTile)
 import qualified Graphics.Gloss.Data.Point.Arithmetic as P ((+), (-))
 import Control.Applicative (Applicative(liftA2))
+import Control.Monad.Random (RandomGen (next))
+import System.Random.Shuffle (shuffle')
+
+data TetrominoKind = I | J | L | O | S | T | Z
 
 data Tetromino = Tetromino {
   center  :: Point,
-  angle   :: Angle,
-  offsets :: Angle -> [Point],
-  tiles'  :: [Tile]
+  rotationState :: RotationState,
+  kind :: TetrominoKind,
+  tiles' :: [Tile]
 }
 
 left, right, down :: Point
@@ -17,11 +22,11 @@ left  = (-1, 0)
 right = ( 1, 0)
 down  = ( 0,-1)
 
-nextAngle :: RotationDirection -> Angle -> Angle
-nextAngle RotateLeft  L = Z
-nextAngle RotateRight Z = L
-nextAngle RotateLeft  x = pred x
-nextAngle RotateRight x = succ x
+nextRotationState :: RotationDirection -> RotationState -> RotationState
+nextRotationState RotateLeft  RL = R2
+nextRotationState RotateRight R2 = RL
+nextRotationState RotateLeft  x = pred x
+nextRotationState RotateRight x = succ x
 
 moveTetromino :: Point -> Tetromino -> Tetromino
 moveTetromino p1 t = t {
@@ -29,9 +34,12 @@ moveTetromino p1 t = t {
   tiles' = map (moveTile p1) (tiles' t)
 }
 
+moveTetrominoTo :: Point -> Tetromino -> Tetromino
+moveTetrominoTo p1 t = moveTetromino (p1 P.- center t) t
+
 rotateTetromino :: RotationDirection -> Tetromino -> Tetromino
 rotateTetromino rd t = t {
-  angle  = nextAngle rd (angle t),
+  rotationState = nextRotationState rd (rotationState t),
   tiles' = map (rotateTile rd $ center t) (tiles' t)
 }
 
@@ -50,48 +58,50 @@ occupied b = any (`elem` b) . tiles'
 invalidPosition :: [Tile] -> Tetromino -> Bool
 invalidPosition ts = liftA2 (||) overflows (occupied ts)
 
-tests :: RotationDirection -> Angle -> (Angle -> [Point]) -> [Point]
-tests rd r o = zipWith (P.-) (o r) (o $ nextAngle rd r)
+tests :: RotationDirection -> RotationState -> TetrominoKind -> [Point]
+tests rd rs k = zipWith (P.-) (offset k rs) (offset k $ nextRotationState rd rs)
 
 --- terominos definitions
 
-tetrominos :: [Tetromino]
-tetrominos = map (moveTetromino (5,20)) [j,l,s,t',z,i,o']
+tetrominos :: [TetrominoKind]
+tetrominos = [S, J, L, T, Z, O, I]
 
-jlstzOffsets, iOffsets, oOffsets :: Angle -> [Point]
-jlstzOffsets O = [(0,0), ( 0,0), ( 0, 0), (0,0), ( 0,0)]
-jlstzOffsets R = [(0,0), ( 1,0), ( 1,-1), (0,2), ( 1,2)]
-jlstzOffsets Z = [(0,0), ( 0,0), ( 0, 0), (0,0), ( 0,0)]
-jlstzOffsets L = [(0,0), (-1,0), (-1,-1), (0,2), (-1,2)]
+infiniteTetrominos :: RandomGen g => g -> [TetrominoKind]
+infiniteTetrominos g = do
+  let shuffled = shuffle' tetrominos 7 g
+  let (_, g')  = next g
+  shuffled ++ infiniteTetrominos g'
 
-iOffsets O = [( 0,0), (-1,0), ( 2,0), (-1, 0), ( 2,0)]
-iOffsets R = [(-1,0), ( 0,0), ( 0,0), ( 0, 1), ( 0,2)]
-iOffsets Z = [(-1,1), ( 1,1), (-2,1), ( 1, 0), (-2,0)]
-iOffsets L = [( 0,1), ( 0,1), ( 0,1), ( 0,-1), ( 0,2)]
+offset :: TetrominoKind -> RotationState -> [Point]
+offset I R0 = [( 0,0), (-1,0), ( 2,0), (-1, 0), ( 2,0)]
+offset I RR = [(-1,0), ( 0,0), ( 0,0), ( 0, 1), ( 0,2)]
+offset I R2 = [(-1,1), ( 1,1), (-2,1), ( 1, 0), (-2,0)]
+offset I RL = [( 0,1), ( 0,1), ( 0,1), ( 0,-1), ( 0,2)]
 
-oOffsets O = [( 0, 0)]
-oOffsets R = [( 0,-1)]
-oOffsets Z = [(-1,-1)]
-oOffsets L = [(-1, 0)]
+offset O R0 = [( 0, 0)]
+offset O RR = [( 0,-1)]
+offset O R2 = [(-1,-1)]
+offset O RL = [(-1, 0)]
 
-jlstzBase :: [Tile] -> Tetromino
-jlstzBase = Tetromino (1,1) O jlstzOffsets
+offset _ R0 = [(0,0), ( 0,0), ( 0, 0), (0,0), ( 0,0)]
+offset _ RR = [(0,0), ( 1,0), ( 1,-1), (0,2), ( 1,2)]
+offset _ R2 = [(0,0), ( 0,0), ( 0, 0), (0,0), ( 0,0)]
+offset _ RL = [(0,0), (-1,0), (-1,-1), (0,2), (-1,2)]
 
-j, l, s, t', z, i, o' :: Tetromino
-s = jlstzBase (map (Tile aquamarine) [(0,1), (1,1), (1,2), (2,2)])
-j = jlstzBase (map (Tile blue  )     [(0,2), (0,1), (1,1), (2,1)])
-l = jlstzBase (map (Tile orange)     [(0,1), (1,1), (2,1), (2,2)])
-t'= jlstzBase (map (Tile violet)     [(0,1), (1,1), (1,2), (2,1)])
-z = jlstzBase (map (Tile red   )     [(0,2), (1,2), (1,1), (2,1)])
-i = Tetromino {
+tetrominoBase :: TetrominoKind -> [Tile] -> Tetromino
+tetrominoBase = Tetromino (1,1) R0
+
+
+getTetromino :: TetrominoKind -> Tetromino
+getTetromino S = tetrominoBase S (map (Tile green) [(0,1), (1,1), (1,2), (2,2)])
+getTetromino J = tetrominoBase J (map (Tile blue) [(0,2), (0,1), (1,1), (2,1)])
+getTetromino L = tetrominoBase L (map (Tile orange)     [(0,1), (1,1), (2,1), (2,2)])
+getTetromino T = tetrominoBase T (map (Tile violet)[(0,1), (1,1), (1,2), (2,1)])
+getTetromino Z = tetrominoBase Z (map (Tile red   )     [(0,2), (1,2), (1,1), (2,1)])
+getTetromino O = tetrominoBase O (map (Tile yellow)     [(1,1), (1,2), (2,1), (2,2)])
+getTetromino I = Tetromino {
   center  = (2,2),
-  angle   = O,
-  offsets = iOffsets,
-  tiles'  = map (Tile azure) [(1,2), (2,2), (3,2), (4,2)]
-}
-o' = Tetromino {
-  center  = (1,1),
-  angle   = O,
-  offsets = oOffsets,
-  tiles'  = map (Tile yellow) [(1,1), (1,2), (2,1), (2,2)]
+  rotationState = R0,
+  kind = I,
+  tiles' = map (Tile cyan) [(1,2), (2,2), (3,2), (4,2)]
 }

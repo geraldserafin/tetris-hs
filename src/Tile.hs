@@ -2,11 +2,11 @@
 module Tile where
 
 import qualified Graphics.Gloss.Data.Point.Arithmetic as P ((+))
-import Graphics.Gloss (Point, Color)
+import Graphics.Gloss
 
 data Tile = Tile { color' :: Color, pos :: Point }
 data RotationDirection = RotateLeft | RotateRight
-data Angle = L | O | R | Z deriving Enum
+data RotationState = RL | R0 | RR | R2 deriving Enum
 
 instance Eq Tile where
   (==) :: Tile -> Tile -> Bool
