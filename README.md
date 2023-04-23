@@ -1,5 +1,5 @@
 # tetris-hs
-Classic `Tetris` game in `Haskell` using `gloss`.
+`Tetris` game in `Haskell` using `gloss` following the Tetris Guideline. Project for me to further explore the Haskell programming language.
 
 ## Setup
 - Intall GHC and Cabal
