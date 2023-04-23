@@ -10,7 +10,7 @@ transformGame (EventKey key state _ _) = handleKey key state
 transformGame _ = id
 
 handleKey :: Key -> KeyState -> Game -> Game
-handleKey (SpecialKey KeySpace) Down g = placeAndNext $ handleDrop g
+handleKey (SpecialKey KeySpace) Down g = lock $ handleDrop g
 handleKey (SpecialKey KeyUp   ) Down g = handleRotate RotateRight g
 handleKey (SpecialKey key) Down g = handleSpecialKey key $ g { keys = S.insert (key, -0.15) (keys g) }
 handleKey (SpecialKey key) Up   g = g { keys = S.filter ((/=key) . fst) (keys g) }

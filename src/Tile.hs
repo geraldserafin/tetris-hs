@@ -6,7 +6,6 @@ import Graphics.Gloss
 
 data Tile = Tile { color' :: Color, pos :: Point }
 data RotationDirection = RotateLeft | RotateRight
-data RotationState = RL | R0 | RR | R2 deriving Enum
 
 instance Eq Tile where
   (==) :: Tile -> Tile -> Bool

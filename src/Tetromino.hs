@@ -1,13 +1,14 @@
 {-# OPTIONS_GHC -Wno-deprecations #-}
 module Tetromino where
 
-import Graphics.Gloss (Point, aquamarine, blue, orange, violet, red, azure, yellow, makeColor, makeColorI, cyan, green)
-import Tile (RotationState (R2, RL, RR, R0), Tile (pos, Tile), RotationDirection (RotateLeft, RotateRight), moveTile, rotateTile)
+import Graphics.Gloss (Point, blue, orange, violet, red, yellow, cyan, green)
+import Tile (Tile (pos, Tile), RotationDirection (RotateLeft, RotateRight), moveTile, rotateTile)
 import qualified Graphics.Gloss.Data.Point.Arithmetic as P ((+), (-))
 import Control.Applicative (Applicative(liftA2))
 import Control.Monad.Random (RandomGen (next))
 import System.Random.Shuffle (shuffle')
 
+data RotationState = RL | R0 | RR | R2 deriving Enum
 data TetrominoKind = I | J | L | O | S | T | Z
 
 data Tetromino = Tetromino {
@@ -61,8 +62,6 @@ invalidPosition ts = liftA2 (||) overflows (occupied ts)
 tests :: RotationDirection -> RotationState -> TetrominoKind -> [Point]
 tests rd rs k = zipWith (P.-) (offset k rs) (offset k $ nextRotationState rd rs)
 
---- terominos definitions
-
 tetrominos :: [TetrominoKind]
 tetrominos = [S, J, L, T, Z, O, I]
 
@@ -90,7 +89,6 @@ offset _ RL = [(0,0), (-1,0), (-1,-1), (0,2), (-1,2)]
 
 tetrominoBase :: TetrominoKind -> [Tile] -> Tetromino
 tetrominoBase = Tetromino (1,1) R0
-
 
 getTetromino :: TetrominoKind -> Tetromino
 getTetromino S = tetrominoBase S (map (Tile green) [(0,1), (1,1), (1,2), (2,2)])

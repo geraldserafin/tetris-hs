@@ -6,9 +6,6 @@ import Game
 import Rendering 
 import Control.Monad.Random
 
--- width:  10 x 30 + 20
--- heigth: 20 x 30 + 20
-
 windowSize :: (Int, Int)
 windowSize = (450, 620)
 
