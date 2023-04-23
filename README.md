@@ -24,7 +24,7 @@
 ## Todo
 - [x] SRS
 - [x] Hold
-- [x] Next tetrominos queue
+- [x] Next tetromino queue
 - [ ] Lock delay
 - [ ] Level/Speed progression
 - [ ] Score
